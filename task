@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -e
+
+if [[ -f ".env" ]]; then
+    # shellcheck source=/dev/null
+    source ".env"
+fi
+
+help-table() {
+    local -a rows
+    local max_cmd=7 max_opt=6 max_desc=11
+
+    rows+=("Command|Option|Description")
+    rows+=("===LLM===| | ")
+    rows+=("commit-with-llm||Commit with llm generated commit message.")
+    rows+=("update-with-llm|<glob><prompt>|Feed files matching glob to llm.")
+    rows+=("update-changelog-with-llm|[num_lines]|Update CHANGELOG.md from git diff using llm.")
+    rows+=("===Environment===| | ")
+    rows+=("activat-venv||Create or update the local Python virtual environment.")
+    rows+=("===Odoo===| | ")
+    rows+=("publish-app||Publish snippet.html to the Odoo website embed code block.")
+    for row in "${rows[@]}"; do
+        IFS='|' read -r cmd opt desc <<< "$row"
+        (( ${#cmd} > max_cmd )) && max_cmd=${#cmd}
+        (( ${#opt} > max_opt )) && max_opt=${#opt}
+        (( ${#desc} > max_desc )) && max_desc=${#desc}
+    done
+
+    printf '| %-*s | %-*s | %-*s |\n' \
+        "$max_cmd" "Command" \
+        "$max_opt" "Option" \
+        "$max_desc" "Description"
+
+    printf '|-%*s-|-%*s-|-%*s-|\n' \
+        "$max_cmd" "$(printf '%*s' "$max_cmd" '' | tr ' ' '-')" \
+        "$max_opt" "$(printf '%*s' "$max_opt" '' | tr ' ' '-')" \
+        "$max_desc" "$(printf '%*s' "$max_desc" '' | tr ' ' '-')"
+
+    local first_row=true
+    for row in "${rows[@]:1}"; do
+        IFS='|' read -r cmd opt desc <<< "$row"
+        if [[ "$cmd" =~ ^===.*===$ ]]; then
+            group_name="${cmd/===/}"
+            group_name="${group_name/===/}"
+
+            if [ "$first_row" = true ]; then
+                first_row=false
+            else
+                printf '|-%*s-|-%*s-|-%*s-|\n' \
+                    "$max_cmd" "$(printf '%*s' "$max_cmd" '' | tr ' ' '-')" \
+                    "$max_opt" "$(printf '%*s' "$max_opt" '' | tr ' ' '-')" \
+                    "$max_desc" "$(printf '%*s' "$max_desc" '' | tr ' ' '-')"
+            fi
+
+            local left_pad=$(( (max_cmd - ${#group_name}) / 2 ))
+            local right_pad=$(( max_cmd - left_pad - ${#group_name} ))
+            printf '| %*s%s%*s | %*s | %*s |\n' \
+                "$left_pad" "" \
+                "$group_name" \
+                "$right_pad" "" \
+                "$max_opt" "" \
+                "$max_desc" ""
+
+            printf '|-%*s-|-%*s-|-%*s-|\n' \
+                "$max_cmd" "$(printf '%*s' "$max_cmd" '' | tr ' ' '-')" \
+                "$max_opt" "$(printf '%*s' "$max_opt" '' | tr ' ' '-')" \
+                "$max_desc" "$(printf '%*s' "$max_desc" '' | tr ' ' '-')"
+        else
+            first_row=false
+            printf '| %-*s | %-*s | %-*s |\n' \
+                "$max_cmd" "$cmd" \
+                "$max_opt" "$opt" \
+                "$max_desc" "$desc"
+        fi
+    done
+}
+
+help() {
+    local grep_pattern
+    echo
+    if [[ -n "$1" ]]; then
+        grep_pattern="$1"
+        help-table | grep -i "$grep_pattern" | column -t -s'|'
+    else
+        echo "task <command> [options]"
+        echo
+        echo "commands:"
+        echo
+        help-table
+    fi
+    echo
+}
+
+publish-app() {
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    if ! command -v python3 &> /dev/null; then
+        echo "python3 is required but not found."
+        exit 1
+    fi
+    echo "Publishing snippet to Odoo website ..."
+    python3 "${script_dir}/scripts/publish.py"
+}
+
+activat-venv() {
+    if ! command -v python3 &> /dev/null; then
+        echo "python3 is required but not found."
+        exit 1
+    fi
+
+    local project_root
+    project_root="$(cd "$(dirname "$0")" && pwd)"
+    local venv_dir="${project_root}/.venv"
+
+    if [[ -d "${venv_dir}" ]]; then
+        echo "Virtual environment already exists at ${venv_dir}"
+    else
+        echo "Creating virtual environment at ${venv_dir} ..."
+        python3 -m venv "${venv_dir}"
+        echo "Virtual environment created."
+    fi
+
+    if [[ -f "${project_root}/requirements.txt" ]]; then
+        echo "Installing requirements from requirements.txt ..."
+        "${venv_dir}/bin/pip" install -r "${project_root}/requirements.txt"
+    fi
+
+    echo
+    echo "Activate with:"
+    echo "  source ${venv_dir}/bin/activate"
+}
+
+if [[ -d "$HOME/taskfile.build/bin" ]]; then
+    for file in "$HOME/taskfile.build/bin/"*; do
+        if [[ -f "$file" && -x "$file" ]]; then
+            # shellcheck disable=SC1090
+            source "$file"
+        fi
+    done
+fi
+
+if [[ "$1" == *","* ]]; then
+    # Split comma-separated commands
+    IFS=',' read -ra COMMANDS <<< "$1"
+    for cmd in "${COMMANDS[@]}"; do
+        # Trim whitespace
+        cmd=$(echo "$cmd" | xargs)
+        if declare -f "$cmd" > /dev/null; then
+            "$cmd"
+        else
+            echo "Unknown command: $cmd"
+            help "$@"
+            exit 1
+        fi
+    done
+elif declare -f "$1" > /dev/null; then
+    if [[ "${2:-}" == "tfhelp" ]]; then
+        help "$1"
+    else
+        "$1" "${@:2}"
+    fi
+else
+    case "$1" in
+        *)
+            echo "Unknown command: $1"
+            exit 1
+            ;;
+    esac
+fi

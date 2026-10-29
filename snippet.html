@@ -1,0 +1,205 @@
+<div id="pricelist-app" class="container my-4">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Product Pricelists</h5>
+            <span id="wpa-status" class="small">&nbsp;</span>
+        </div>
+        <div class="card-body p-0">
+            <div id="wpa-loading" class="p-3 text-center text-muted">
+                <span class="spinner-border spinner-border-sm me-2"></span>Loading ...
+            </div>
+            <div id="wpa-content" style="display:none;">
+                <table class="table table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Currency</th>
+                            <th>Company</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wpa-table-body"></tbody>
+                </table>
+            </div>
+            <div id="wpa-empty" class="p-3 text-center text-muted" style="display:none;">
+                No pricelists found.
+            </div>
+            <div id="wpa-error" class="alert alert-danger m-3 mb-0" style="display:none;" role="alert"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var container = document.getElementById('pricelist-app');
+    if (!container || container.getAttribute('data-initialized')) return;
+    container.setAttribute('data-initialized', '1');
+
+    var statusEl = document.getElementById('wpa-status');
+    var loadingEl = document.getElementById('wpa-loading');
+    var contentEl = document.getElementById('wpa-content');
+    var emptyEl = document.getElementById('wpa-empty');
+    var errorEl = document.getElementById('wpa-error');
+    var tbody = document.getElementById('wpa-table-body');
+
+    var pricelists = [];
+    var editingId = null;
+
+    function rpc(url, params) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'call',
+                params: params,
+                id: Math.floor(Math.random() * 1000000000)
+            })
+        }).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        }).then(function (data) {
+            if (data.error) {
+                var msg = data.error.data && data.error.data.message ? data.error.data.message : data.error.message;
+                throw new Error(msg);
+            }
+            return data.result;
+        });
+    }
+
+    function setStatus(msg) {
+        if (!msg) { statusEl.textContent = ''; return; }
+        statusEl.textContent = msg;
+        window.setTimeout(function () { statusEl.textContent = ''; }, 3000);
+    }
+
+    function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.style.display = 'block';
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+    }
+
+    function loadPricelists() {
+        loadingEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+        errorEl.style.display = 'none';
+
+        rpc('/web/dataset/call_kw', {
+            model: 'product.pricelist',
+            method: 'search_read',
+            args: [[], ['id', 'name', 'currency_id', 'company_id']],
+            kwargs: { order: 'id desc' }
+        }).then(function (result) {
+            pricelists = result || [];
+            editingId = null;
+            render();
+        }).catch(function (err) {
+            showError('Error loading pricelists: ' + err.message);
+        });
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function render() {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'none';
+
+        if (!pricelists.length) {
+            emptyEl.style.display = 'block';
+            contentEl.style.display = 'none';
+            return;
+        }
+
+        contentEl.style.display = 'block';
+
+        var html = '';
+        for (var i = 0; i < pricelists.length; i++) {
+            var pl = pricelists[i];
+            var isEditing = editingId === pl.id;
+
+            var nameCell;
+            if (isEditing) {
+                nameCell = '<input type="text" class="form-control form-control-sm" id="wpa-inp-' + pl.id + '" value="' + escapeHtml(pl.name) + '" />';
+            } else {
+                nameCell = '<span>' + escapeHtml(pl.name) + '</span>';
+            }
+
+            var actions;
+            if (isEditing) {
+                actions =
+                    '<button type="button" class="btn btn-sm btn-primary me-1 wpa-save" data-id="' + pl.id + '">Save</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary wpa-cancel" data-id="' + pl.id + '">Cancel</button>';
+            } else {
+                actions = '<button type="button" class="btn btn-sm btn-outline-primary wpa-edit" data-id="' + pl.id + '">Edit</button>';
+            }
+
+            html +=
+                '<tr>' +
+                '<td class="align-middle">' + pl.id + '</td>' +
+                '<td class="align-middle">' + nameCell + '</td>' +
+                '<td class="align-middle">' + (pl.currency_id ? escapeHtml(pl.currency_id[1]) : '-') + '</td>' +
+                '<td class="align-middle">' + (pl.company_id ? escapeHtml(pl.company_id[1]) : '-') + '</td>' +
+                '<td class="text-end">' + actions + '</td>' +
+                '</tr>';
+        }
+
+        tbody.innerHTML = html;
+    }
+
+    function edit(id) {
+        editingId = id;
+        render();
+    }
+
+    function cancel() {
+        editingId = null;
+        render();
+    }
+
+    function save(id) {
+        var input = document.getElementById('wpa-inp-' + id);
+        var newName = input ? input.value.trim() : '';
+        if (!newName) return;
+
+        setStatus('Saving ...');
+
+        rpc('/web/dataset/call_kw', {
+            model: 'product.pricelist',
+            method: 'write',
+            args: [[id], { name: newName }],
+            kwargs: {}
+        }).then(function () {
+            editingId = null;
+            setStatus('Saved.');
+            loadPricelists();
+        }).catch(function (err) {
+            showError('Error saving: ' + err.message);
+        });
+    }
+
+    container.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('button');
+        if (!btn) return;
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        if (btn.classList.contains('wpa-edit')) {
+            edit(id);
+        } else if (btn.classList.contains('wpa-save')) {
+            save(id);
+        } else if (btn.classList.contains('wpa-cancel')) {
+            cancel();
+        }
+    });
+
+    loadPricelists();
+})();
+</script>

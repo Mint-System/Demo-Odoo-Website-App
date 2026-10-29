@@ -1,0 +1,12 @@
+# Taskfile
+tmp
+
+# dotenv
+.env
+
+
+# pnpm
+node_modules
+pnpm-workspace.yaml
+
+# Project
