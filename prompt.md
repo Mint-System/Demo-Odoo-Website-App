@@ -1,16 +1,17 @@
 ---
-title: "Init Odoo Website App"
+title: "Pricelist Importer"
 author: "Janik von Rotz <login@janikvonrotz.ch>"
 action: implement
-state: review
-date_completed: 2026-10-29
-harness: pi
-model: moonshotai/Kimi-K2.6
-input_tokens: 43000
-output_tokens: 18000
+state: draft
+date_completed: YYYY-MM-DD
+harness:
+provider:
+model:
+input_tokens:
+output_tokens:
 ---
 
-# Init Odoo Website App
+# Pricelist Importer
 
 Note: @Clanker refers to the "ai agent" (you) who is working on this prompt file.
 
@@ -22,41 +23,34 @@ Note: @Clanker refers to the "ai agent" (you) who is working on this prompt file
 
 ## Task
 
-This is a test.
+Every month I receive a pricelist from a Vendor and would like to import it into Odoo.
 
-I have an Odoo instance running:
+Please create an Odoo Website App (HTML/CSS/JavaScript) that helps importing the pricelist into Odoo.
 
-Url: http://localhost:8069
-Database: 19.0
-Username: admin
-Password: admin
+### Access 
 
-I have prepared an Odoo website site: http://localhost:8069/
+My Odoo instance is running at:
 
-On the website I have added a code block to embed html. I click on "Edit" on the code block I see:
+Url: http://localhost:8069  
+Database: 19.0  
+Username: admin  
+Password: admin  
 
-```html
-<div class="alert alert-info mb-0">
-    In der rechten Leiste auf <b>„Bearbeiten“</b> klicken, um diesen mit Ihrem eigenen HTML-Code zu ersetzen.
-</div>
-```
+I have installed the `website` module.
 
-As I understand I can create a JavaScript-App and embed it here.
+### Pricelist App
 
-Please create a simple app that shows the "product.pricelist" records. Moreover the app should make it possible to edit the pricelist name.
+Create an HTML/CSS/JavaScript-App and create a script to embed it on the Odoo website.
 
-Document the steps you took to create this app and how you published the app to the website.
+The app allows me to upload a pricelsit in the format of `input/vendor_pricelist.csv`.
 
+Create an Odoo website page "Pricelist Importer" and embed the Code on this page.
+
+After the import the app gives a summary.
 @Clanker When task is completed set frontmatter state to review. Prompt the author to verify the results.
 
 ## Worklog
 
-- Created a standalone HTML+JS snippet (`snippet.html`) that uses vanilla JavaScript and `fetch` to call Odoo's standard `/web/dataset/call_kw` JSON-RPC endpoint.
-- The snippet displays `product.pricelist` records in a Bootstrap-styled table and supports inline name editing via `product.pricelist.write`.
-- Authentication is handled automatically by the browser's session cookie (same-origin policy).
-- Tested the JSON-RPC endpoints with curl to verify search and write operations work.
-- Documented the exact steps to embed the snippet into an Odoo Website **Embed Code** block in `README.md`.
-- Initially created an Odoo module as an alternative approach, then removed it after clarifying the requirement for a pure JS snippet.
+@Clanker Add a summary here once the task has been completed.
 
-@Clanker If author confirms results set frontmatter state to completed, otherwise to aborted. Update date, harness and model. If you have access to session info also add token count.
-
+@Clanker If author confirms results set frontmatter state to completed, otherwise to aborted. Update date, harness, provider and model. If you have access to session info also add token count.
