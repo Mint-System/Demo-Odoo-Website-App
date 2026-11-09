@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Usage: https://taskfile.build/usage/
 set -e
 
 if [[ -f ".env" ]]; then
@@ -18,7 +19,8 @@ help-table() {
     rows+=("===Environment===| | ")
     rows+=("activat-venv||Create or update the local Python virtual environment.")
     rows+=("===Odoo===| | ")
-    rows+=("publish-app||Publish snippet.html to the Odoo website embed code block.")
+    rows+=("publish-app||Publish pricelist.html to the Odoo website embed code block.")
+    rows+=("publish-pricelist-importer||Create or update the Pricelist Importer website page.")
     for row in "${rows[@]}"; do
         IFS='|' read -r cmd opt desc <<< "$row"
         (( ${#cmd} > max_cmd )) && max_cmd=${#cmd}
@@ -99,7 +101,18 @@ publish-app() {
         exit 1
     fi
     echo "Publishing snippet to Odoo website ..."
-    python3 "${script_dir}/scripts/publish.py"
+    python3 "${script_dir}/scripts/publish_pricelist.py"
+}
+
+publish-pricelist-importer() {
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    if ! command -v python3 &> /dev/null; then
+        echo "python3 is required but not found."
+        exit 1
+    fi
+    echo "Publishing pricelist importer page to Odoo website ..."
+    python3 "${script_dir}/scripts/publish_pricelist_importer.py"
 }
 
 activat-venv() {

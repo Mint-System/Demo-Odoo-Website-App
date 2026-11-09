@@ -2,13 +2,13 @@
 title: "Pricelist Importer"
 author: "Janik von Rotz <login@janikvonrotz.ch>"
 action: implement
-state: draft
-date_completed: YYYY-MM-DD
-harness:
-provider:
-model:
-input_tokens:
-output_tokens:
+state: completed
+date_completed: 2026-11-09
+harness: pi
+provider: deepseek
+model: deepseek-v4-1-flash-1017
+input_tokens: 991991
+output_tokens: 58698
 ---
 
 # Pricelist Importer
@@ -42,15 +42,48 @@ I have installed the `website` module.
 
 Create an HTML/CSS/JavaScript-App and create a script to embed it on the Odoo website.
 
-The app allows me to upload a pricelsit in the format of `input/vendor_pricelist.csv`.
+The app allows me to upload a pricelist in the format of `input/vendor_pricelist.csv`. Here is an example:
+
+```csv
+sku,product,price,currency
+P001,Table,100,CHF
+P002,Chair,50,CHF
+P003,Desk,75,CHF
+```
 
 Create an Odoo website page "Pricelist Importer" and embed the Code on this page.
 
-After the import the app gives a summary.
+After the import the app must show a summary.
+
 @Clanker When task is completed set frontmatter state to review. Prompt the author to verify the results.
 
 ## Worklog
 
-@Clanker Add a summary here once the task has been completed.
+Implemented the Pricelist Importer website app.
 
-@Clanker If author confirms results set frontmatter state to completed, otherwise to aborted. Update date, harness, provider and model. If you have access to session info also add token count.
+**App** – `pricelist-importer.html`, a self-contained HTML/CSS/JS snippet with four steps:
+
+1. **Upload** – click or drag & drop, 2 MB limit, configurable pricelist name and an "create missing products" toggle.
+2. **Preview** – client-side CSV parsing with per-row validation (missing SKU/product, invalid price/currency). Supports `,`/`;`/tab delimiters, quoted values, BOM and both `1,234.50` and `1.234,50` price formats.
+3. **Progress** – progress bar while rows are imported sequentially.
+4. **Summary** – products created/updated, pricelist rules written, skipped rows with reasons, resolved currencies, total value per currency.
+
+**Import logic** – via `/web/dataset/call_kw` on the same origin (session cookie): resolves and activates currencies, finds or creates the pricelist by name, matches products on `default_code` (SKU), creates missing products, then writes a fixed-price `product.pricelist.item` (`applied_on=1_product`, `compute_price=fixed`) per row.
+
+**Publishing** – `scripts/publish_pricelist_importer.py` creates or updates the `website.page` `/pricelist-importer` (QWeb view `website.pricelist_importer`) with an `s_embed_code` snippet. Wired as `./task publish-pricelist-importer`. Re-running is idempotent. The script normalises void tags and boolean attributes for Odoo's XML arch validation.
+
+**Verification**
+
+- Page published and served with HTTP 200; rendered app script passes `node --check`.
+- CSV parser unit-tested in Node against the sample file and edge cases.
+- RPC flow replayed against Odoo: 3 products created, 3 pricelist rules written, summary correct.
+- Full UI flow driven in headless Chromium via CDP: upload → preview → import → summary, for both the "products created" and "products already exist" paths, plus the reset action.
+- Screenshots of each step (app card only) stored in `output/`.
+- All test data (pricelists, products, rules, currency activation) cleaned up afterwards.
+
+**Notes**
+
+- Odoo validates view arch as XML: `<` inside `<script>` must be written as `&lt;` and `&&` as `&amp;&amp;`. Documented in `AGENTS.md`.
+- The legacy `publish-app` task now points at the renamed `scripts/publish_pricelist.py`.
+
+Verify at <http://localhost:8069/pricelist-importer>.

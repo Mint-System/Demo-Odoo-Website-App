@@ -1,0 +1,734 @@
+<div id="pricelist-importer" class="container my-4">
+    <style>
+        #pricelist-importer .pi-dropzone {
+            border: 2px dashed #adb5bd;
+            border-radius: .5rem;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .15s, background-color .15s;
+        }
+        #pricelist-importer .pi-dropzone:hover,
+        #pricelist-importer .pi-dropzone.pi-dragover {
+            border-color: #714b67;
+            background-color: #f8f5f7;
+        }
+        #pricelist-importer .pi-table {
+            max-height: 22rem;
+            overflow-y: auto;
+        }
+        #pricelist-importer .pi-table table {
+            font-size: .875rem;
+            margin-bottom: 0;
+        }
+        #pricelist-importer .pi-badge {
+            font-size: .75rem;
+            padding: .2rem .45rem;
+        }
+        #pricelist-importer .pi-summary dt {
+            font-weight: 600;
+        }
+    </style>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Pricelist Importer</h5>
+            <span id="pi-session" class="small opacity-75">&#160;</span>
+        </div>
+
+        <div class="card-body">
+            <!-- Step 1: upload -->
+            <div id="pi-step-upload">
+                <p class="text-muted mb-3">
+                    Upload a vendor pricelist as CSV with the columns
+                    <code>sku, product, price, currency</code>.
+                </p>
+
+                <div id="pi-dropzone" class="pi-dropzone mb-3" tabindex="0" role="button"
+                     aria-label="Upload pricelist CSV">
+                    <div class="fs-4 mb-1">&#8593;</div>
+                    <div><strong>Click to choose a file</strong> or drag &amp; drop it here</div>
+                    <div class="text-muted small mt-1">CSV, max. 2 MB</div>
+                    <input type="file" id="pi-file" accept=".csv,text/csv" class="d-none">
+                </div>
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-sm-6">
+                        <label for="pi-pricelist-name" class="form-label small mb-1">Pricelist name</label>
+                        <input type="text" id="pi-pricelist-name" class="form-control form-control-sm"
+                               placeholder="Vendor Pricelist 2025-11">
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="pi-create-products" checked>
+                            <label class="form-check-label small" for="pi-create-products">
+                                Create products that do not exist yet (matched by SKU)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pi-upload-error" class="alert alert-danger mt-3 mb-0 d-none" role="alert"></div>
+            </div>
+
+            <!-- Step 2: preview + import -->
+            <div id="pi-step-preview" class="d-none">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                    <div>
+                        <strong id="pi-file-name"></strong>
+                        <span id="pi-row-count" class="text-muted small ms-2"></span>
+                    </div>
+                    <div id="pi-preview-badges"></div>
+                </div>
+
+                <div class="pi-table border rounded mb-3">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width:3rem;">#</th>
+                                <th>SKU</th>
+                                <th>Product</th>
+                                <th class="text-end">Price</th>
+                                <th>Currency</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pi-preview-body"></tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="button" id="pi-import" class="btn btn-primary">
+                        Import <span id="pi-import-count"></span>
+                    </button>
+                    <button type="button" id="pi-reset" class="btn btn-outline-secondary">Choose another file</button>
+                </div>
+            </div>
+
+            <!-- Step 3: progress -->
+            <div id="pi-step-progress" class="d-none">
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Importing ...</span>
+                    <span id="pi-progress-label"></span>
+                </div>
+                <div class="progress" style="height:.75rem;">
+                    <div id="pi-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width:0%"></div>
+                </div>
+            </div>
+
+            <!-- Step 4: summary -->
+            <div id="pi-step-summary" class="d-none">
+                <div class="alert alert-success d-flex align-items-center" role="status">
+                    <div>
+                        <strong>Import finished.</strong>
+                        <span id="pi-summary-headline"></span>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <div class="fs-3" id="pi-stat-created">0</div>
+                            <div class="small text-muted">Products created</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <div class="fs-3" id="pi-stat-updated">0</div>
+                            <div class="small text-muted">Products updated</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <div class="fs-3" id="pi-stat-items">0</div>
+                            <div class="small text-muted">Pricelist rules</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <div class="fs-3" id="pi-stat-skipped">0</div>
+                            <div class="small text-muted">Rows skipped</div>
+                        </div>
+                    </div>
+                </div>
+
+                <dl class="row pi-summary small mb-3">
+                    <dt class="col-sm-3">Pricelist</dt>
+                    <dd class="col-sm-9" id="pi-summary-pricelist">-</dd>
+                    <dt class="col-sm-3">Currencies</dt>
+                    <dd class="col-sm-9" id="pi-summary-currencies">-</dd>
+                    <dt class="col-sm-3">Total value</dt>
+                    <dd class="col-sm-9" id="pi-summary-total">-</dd>
+                </dl>
+
+                <div id="pi-summary-errors" class="d-none">
+                    <h6 class="text-danger">Skipped rows</h6>
+                    <ul id="pi-summary-error-list" class="small text-danger mb-3"></ul>
+                </div>
+
+                <button type="button" id="pi-again" class="btn btn-outline-primary">Import another pricelist</button>
+            </div>
+
+            <div id="pi-error" class="alert alert-danger mt-3 mb-0 d-none" role="alert"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var root = document.getElementById('pricelist-importer');
+    if (!root || root.getAttribute('data-initialized')) return;
+    root.setAttribute('data-initialized', '1');
+
+    var MAX_FILE_BYTES = 2 * 1024 * 1024;
+    var REQUIRED_COLUMNS = ['sku', 'product', 'price', 'currency'];
+    var BATCH_SIZE = 50;
+
+    var el = {
+        session: document.getElementById('pi-session'),
+        stepUpload: document.getElementById('pi-step-upload'),
+        stepPreview: document.getElementById('pi-step-preview'),
+        stepProgress: document.getElementById('pi-step-progress'),
+        stepSummary: document.getElementById('pi-step-summary'),
+        dropzone: document.getElementById('pi-dropzone'),
+        file: document.getElementById('pi-file'),
+        pricelistName: document.getElementById('pi-pricelist-name'),
+        createProducts: document.getElementById('pi-create-products'),
+        uploadError: document.getElementById('pi-upload-error'),
+        error: document.getElementById('pi-error'),
+        fileName: document.getElementById('pi-file-name'),
+        rowCount: document.getElementById('pi-row-count'),
+        previewBadges: document.getElementById('pi-preview-badges'),
+        previewBody: document.getElementById('pi-preview-body'),
+        importBtn: document.getElementById('pi-import'),
+        importCount: document.getElementById('pi-import-count'),
+        resetBtn: document.getElementById('pi-reset'),
+        progressBar: document.getElementById('pi-progress-bar'),
+        progressLabel: document.getElementById('pi-progress-label'),
+        summaryHeadline: document.getElementById('pi-summary-headline'),
+        statCreated: document.getElementById('pi-stat-created'),
+        statUpdated: document.getElementById('pi-stat-updated'),
+        statItems: document.getElementById('pi-stat-items'),
+        statSkipped: document.getElementById('pi-stat-skipped'),
+        summaryPricelist: document.getElementById('pi-summary-pricelist'),
+        summaryCurrencies: document.getElementById('pi-summary-currencies'),
+        summaryTotal: document.getElementById('pi-summary-total'),
+        summaryErrors: document.getElementById('pi-summary-errors'),
+        summaryErrorList: document.getElementById('pi-summary-error-list'),
+        again: document.getElementById('pi-again')
+    };
+
+    var state = {
+        rows: [],
+        fileName: '',
+        currencyIds: {},
+        importing: false
+    };
+
+    // --- Odoo RPC -------------------------------------------------------
+
+    function rpc(model, method, args, kwargs) {
+        return fetch('/web/dataset/call_kw', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'call',
+                params: { model: model, method: method, args: args, kwargs: kwargs || {} },
+                id: Math.floor(Math.random() * 1e9)
+            })
+        }).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        }).then(function (data) {
+            if (data.error) {
+                var info = data.error.data || {};
+                throw new Error(info.message || data.error.message || 'Odoo RPC error');
+            }
+            return data.result;
+        });
+    }
+
+    function searchRead(model, domain, fields, kwargs) {
+        return rpc(model, 'search_read', [domain, fields], kwargs);
+    }
+
+    // --- Helpers --------------------------------------------------------
+
+    function escapeHtml(value) {
+        var div = document.createElement('div');
+        div.textContent = value === null || value === undefined ? '' : String(value);
+        return div.innerHTML;
+    }
+
+    function showStep(name) {
+        el.stepUpload.classList.toggle('d-none', name !== 'upload');
+        el.stepPreview.classList.toggle('d-none', name !== 'preview');
+        el.stepProgress.classList.toggle('d-none', name !== 'progress');
+        el.stepSummary.classList.toggle('d-none', name !== 'summary');
+    }
+
+    function showError(target, message) {
+        if (!message) {
+            target.classList.add('d-none');
+            target.textContent = '';
+            return;
+        }
+        target.textContent = message;
+        target.classList.remove('d-none');
+    }
+
+    function today() {
+        var d = new Date();
+        var pad = function (n) { return n &lt; 10 ? '0' + n : '' + n; };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    // --- CSV parsing ----------------------------------------------------
+
+    function detectDelimiter(text) {
+        var header = text.split(/\r\n|\n|\r/)[0] || '';
+        var best = ',';
+        var bestCount = 0;
+        [',', ';', '\t'].forEach(function (candidate) {
+            var count = header.split(candidate).length - 1;
+            if (count > bestCount) { best = candidate; bestCount = count; }
+        });
+        return best;
+    }
+
+    function parseCsv(text) {
+        var lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
+        var delimiter = detectDelimiter(text);
+        var cells = [];
+        var current = '';
+        var inQuotes = false;
+        var result = [];
+
+        for (var i = 0; i &lt; lines.length; i++) {
+            var line = lines[i];
+            if (!inQuotes &amp;&amp; line.trim() === '') continue;
+            cells = [];
+            current = '';
+            inQuotes = false;
+
+            for (var j = 0; j &lt; line.length; j++) {
+                var ch = line.charAt(j);
+                if (inQuotes) {
+                    if (ch === '"') {
+                        if (line.charAt(j + 1) === '"') { current += '"'; j++; }
+                        else { inQuotes = false; }
+                    } else {
+                        current += ch;
+                    }
+                } else if (ch === '"') {
+                    inQuotes = true;
+                } else if (ch === delimiter) {
+                    cells.push(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            cells.push(current);
+            result.push(cells);
+        }
+        return result;
+    }
+
+    function parsePrice(raw) {
+        var cleaned = String(raw).replace(/[^0-9,.\-]/g, '');
+        if (!cleaned) return NaN;
+
+        var lastComma = cleaned.lastIndexOf(',');
+        var lastDot = cleaned.lastIndexOf('.');
+        if (lastComma > -1 &amp;&amp; lastDot > -1) {
+            // Both separators present: the rightmost one is the decimal separator.
+            if (lastComma > lastDot) {
+                cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+            } else {
+                cleaned = cleaned.replace(/,/g, '');
+            }
+        } else if (lastComma > -1) {
+            // A single comma with 1-2 trailing digits is a decimal separator.
+            cleaned = cleaned.length - lastComma - 1 &lt;= 2
+                ? cleaned.replace(',', '.')
+                : cleaned.replace(/,/g, '');
+        }
+
+        var value = parseFloat(cleaned);
+        return isNaN(value) ? NaN : value;
+    }
+
+    function buildRows(matrix) {
+        if (!matrix.length) throw new Error('The file is empty.');
+
+        var header = matrix[0].map(function (h) { return h.trim().toLowerCase(); });
+        var index = {};
+        for (var c = 0; c &lt; REQUIRED_COLUMNS.length; c++) {
+            var pos = header.indexOf(REQUIRED_COLUMNS[c]);
+            if (pos === -1) {
+                throw new Error('Missing column "' + REQUIRED_COLUMNS[c] + '". Expected header: ' + REQUIRED_COLUMNS.join(', '));
+            }
+            index[REQUIRED_COLUMNS[c]] = pos;
+        }
+
+        var rows = [];
+        for (var r = 1; r &lt; matrix.length; r++) {
+            var cells = matrix[r];
+            var row = {
+                line: r + 1,
+                sku: (cells[index.sku] || '').trim(),
+                product: (cells[index.product] || '').trim(),
+                price: parsePrice(cells[index.price] || ''),
+                currency: (cells[index.currency] || '').trim().toUpperCase(),
+                status: 'new',
+                message: ''
+            };
+
+            if (!row.sku) {
+                row.status = 'invalid';
+                row.message = 'Missing SKU';
+            } else if (!row.product) {
+                row.status = 'invalid';
+                row.message = 'Missing product name';
+            } else if (isNaN(row.price) || row.price &lt; 0) {
+                row.status = 'invalid';
+                row.message = 'Invalid price';
+            } else if (!/^[A-Z]{3}$/.test(row.currency)) {
+                row.status = 'invalid';
+                row.message = 'Invalid currency code';
+            }
+            rows.push(row);
+        }
+
+        if (!rows.length) throw new Error('The file contains no data rows.');
+        return rows;
+    }
+
+    // --- Upload handling ------------------------------------------------
+
+    function handleFile(file) {
+        showError(el.uploadError, '');
+        showError(el.error, '');
+
+        if (!file) return;
+        if (file.size > MAX_FILE_BYTES) {
+            showError(el.uploadError, 'File is larger than 2 MB.');
+            return;
+        }
+
+        var reader = new FileReader();
+        reader.onload = function () {
+            var rows;
+            try {
+                rows = buildRows(parseCsv(String(reader.result)));
+            } catch (err) {
+                showError(el.uploadError, err.message);
+                return;
+            }
+            state.rows = rows;
+            state.fileName = file.name;
+            if (!el.pricelistName.value.trim()) {
+                el.pricelistName.value = 'Vendor Pricelist ' + today();
+            }
+            renderPreview();
+        };
+        reader.onerror = function () {
+            showError(el.uploadError, 'The file could not be read.');
+        };
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function renderPreview() {
+        var valid = state.rows.filter(function (r) { return r.status !== 'invalid'; });
+        var invalid = state.rows.length - valid.length;
+
+        el.fileName.textContent = state.fileName;
+        el.rowCount.textContent = state.rows.length + ' rows';
+        el.previewBadges.innerHTML =
+            '&lt;span class="badge bg-success pi-badge">' + valid.length + ' valid&lt;/span>' +
+            (invalid ? ' &lt;span class="badge bg-danger pi-badge">' + invalid + ' invalid&lt;/span>' : '');
+        el.importCount.textContent = valid.length ? '(' + valid.length + ')' : '';
+        el.importBtn.disabled = !valid.length;
+
+        var html = '';
+        for (var i = 0; i &lt; state.rows.length; i++) {
+            var row = state.rows[i];
+            var badge = row.status === 'invalid'
+                ? '&lt;span class="badge bg-danger pi-badge">' + escapeHtml(row.message) + '&lt;/span>'
+                : '&lt;span class="badge bg-secondary pi-badge">ready&lt;/span>';
+            html +=
+                '&lt;tr class="' + (row.status === 'invalid' ? 'table-danger' : '') + '">' +
+                '&lt;td class="text-muted">' + row.line + '&lt;/td>' +
+                '&lt;td>&lt;code>' + escapeHtml(row.sku) + '&lt;/code>&lt;/td>' +
+                '&lt;td>' + escapeHtml(row.product) + '&lt;/td>' +
+                '&lt;td class="text-end">' + (isNaN(row.price) ? '-' : row.price.toFixed(2)) + '&lt;/td>' +
+                '&lt;td>' + escapeHtml(row.currency) + '&lt;/td>' +
+                '&lt;td>' + badge + '&lt;/td>' +
+                '&lt;/tr>';
+        }
+        el.previewBody.innerHTML = html;
+        showStep('preview');
+    }
+
+    // --- Import ---------------------------------------------------------
+
+    function resolveCurrencies(rows) {
+        var codes = [];
+        rows.forEach(function (row) {
+            if (row.status !== 'invalid' &amp;&amp; codes.indexOf(row.currency) === -1) codes.push(row.currency);
+        });
+        if (!codes.length) return Promise.resolve([]);
+
+        return searchRead('res.currency', [['name', 'in', codes]],
+            ['id', 'name', 'active'], { context: { active_test: false } }
+        ).then(function (currencies) {
+            var missing = codes.filter(function (code) {
+                return !currencies.some(function (c) { return c.name === code; });
+            });
+            if (missing.length) {
+                throw new Error('Unknown currency code(s): ' + missing.join(', '));
+            }
+            var inactiveIds = currencies.filter(function (c) { return !c.active; }).map(function (c) { return c.id; });
+            var activate = inactiveIds.length
+                ? rpc('res.currency', 'write', [inactiveIds, { active: true }])
+                : Promise.resolve();
+
+            return activate.then(function () {
+                currencies.forEach(function (c) { state.currencyIds[c.name] = c.id; });
+                return currencies;
+            });
+        });
+    }
+
+    function fetchExistingProducts(skus) {
+        var map = {};
+        var chunks = [];
+        for (var i = 0; i &lt; skus.length; i += BATCH_SIZE) chunks.push(skus.slice(i, i + BATCH_SIZE));
+
+        return chunks.reduce(function (chain, chunk) {
+            return chain.then(function () {
+                return searchRead('product.template', [['default_code', 'in', chunk]],
+                    ['id', 'name', 'default_code', 'list_price'], { context: { active_test: false } }
+                ).then(function (templates) {
+                    templates.forEach(function (t) {
+                        if (t.default_code &amp;&amp; !map[t.default_code]) map[t.default_code] = t;
+                    });
+                });
+            });
+        }, Promise.resolve()).then(function () { return map; });
+    }
+
+    function createPricelist(name, currencyId) {
+        return rpc('product.pricelist', 'create', [{
+            name: name,
+            currency_id: currencyId
+        }]).then(function (id) {
+            return { id: id, created: true };
+        });
+    }
+
+    function findOrCreatePricelist(name, currencyId) {
+        return searchRead('product.pricelist', [['name', '=', name]],
+            ['id', 'name'], { limit: 1, context: { active_test: false } }
+        ).then(function (found) {
+            if (found.length) return { id: found[0].id, created: false };
+            return createPricelist(name, currencyId);
+        });
+    }
+
+    function importRow(row, existing, pricelistId, createProducts) {
+        var product = existing[row.sku];
+
+        function ensureProduct() {
+            if (product) {
+                existing[row.sku] = product;
+                return Promise.resolve({ created: false, id: product.id });
+            }
+            if (!createProducts) {
+                throw new Error('Product not found (create disabled)');
+            }
+            return rpc('product.template', 'create', [{
+                name: row.product,
+                default_code: row.sku,
+                list_price: row.price,
+                sale_ok: true,
+                purchase_ok: true
+            }]).then(function (id) {
+                product = { id: id, name: row.product, default_code: row.sku, list_price: row.price };
+                existing[row.sku] = product;
+                return { created: true, id: id };
+            });
+        }
+
+        return ensureProduct().then(function (result) {
+            return rpc('product.pricelist.item', 'create', [{
+                pricelist_id: pricelistId,
+                applied_on: '1_product',
+                product_tmpl_id: product.id,
+                compute_price: 'fixed',
+                fixed_price: row.price,
+                min_quantity: 1
+            }]).then(function () {
+                return result;
+            });
+        });
+    }
+
+    function runImport() {
+        var rows = state.rows.filter(function (r) { return r.status !== 'invalid'; });
+        if (!rows.length || state.importing) return;
+
+        var pricelistName = el.pricelistName.value.trim() || ('Vendor Pricelist ' + today());
+        var createProducts = el.createProducts.checked;
+        var summary = { created: 0, updated: 0, items: 0, skipped: 0, errors: [] };
+        var currencies = [];
+
+        state.importing = true;
+        showError(el.error, '');
+        showStep('progress');
+        el.progressBar.style.width = '0%';
+        el.progressLabel.textContent = '0 / ' + rows.length;
+
+        resolveCurrencies(rows).then(function (found) {
+            currencies = found;
+            var currencyId = state.currencyIds[rows[0].currency];
+            if (!currencyId) throw new Error('No currency resolved for ' + rows[0].currency);
+            return findOrCreatePricelist(pricelistName, currencyId);
+        }).then(function (pricelist) {
+            summary.pricelistId = pricelist.id;
+            summary.pricelistName = pricelistName;
+            summary.pricelistCreated = pricelist.created;
+
+            var skus = rows.map(function (r) { return r.sku; });
+            return fetchExistingProducts(skus).then(function (existing) {
+                var chain = Promise.resolve();
+                rows.forEach(function (row, idx) {
+                    chain = chain.then(function () {
+                        return importRow(row, existing, pricelist.id, createProducts).then(function (result) {
+                            if (result.created) summary.created++;
+                            else summary.updated++;
+                            summary.items++;
+                            row.status = result.created ? 'created' : 'linked';
+                        }).catch(function (err) {
+                            summary.skipped++;
+                            row.status = 'error';
+                            row.message = err.message;
+                            summary.errors.push('Line ' + row.line + ' (' + row.sku + '): ' + err.message);
+                        }).then(function () {
+                            var done = idx + 1;
+                            var pct = Math.round((done / rows.length) * 100);
+                            el.progressBar.style.width = pct + '%';
+                            el.progressLabel.textContent = done + ' / ' + rows.length;
+                        });
+                    });
+                });
+                return chain;
+            });
+        }).then(function () {
+            renderSummary(summary, rows, currencies);
+        }).catch(function (err) {
+            showStep('preview');
+            showError(el.error, err.message);
+        }).then(function () {
+            state.importing = false;
+        });
+    }
+
+    function renderSummary(summary, rows, currencies) {
+        el.statCreated.textContent = summary.created;
+        el.statUpdated.textContent = summary.updated;
+        el.statItems.textContent = summary.items;
+        el.statSkipped.textContent = summary.skipped;
+
+        el.summaryHeadline.textContent =
+            summary.items + ' of ' + rows.length + ' rows imported into "' + summary.pricelistName + '".';
+
+        el.summaryPricelist.innerHTML =
+            escapeHtml(summary.pricelistName) +
+            ' &lt;span class="text-muted">(#' + summary.pricelistId + ', ' +
+            (summary.pricelistCreated ? 'created' : 'existing') + ')&lt;/span>';
+
+        el.summaryCurrencies.textContent = currencies.map(function (c) {
+            return c.name + (c.active ? '' : ' (activated)');
+        }).join(', ') || '-';
+
+        var totals = {};
+        rows.forEach(function (row) {
+            if (row.status === 'error') return;
+            totals[row.currency] = (totals[row.currency] || 0) + row.price;
+        });
+        el.summaryTotal.textContent = Object.keys(totals).map(function (code) {
+            return totals[code].toFixed(2) + ' ' + code;
+        }).join(' | ') || '-';
+
+        if (summary.errors.length) {
+            el.summaryErrorList.innerHTML = summary.errors.map(function (msg) {
+                return '&lt;li>' + escapeHtml(msg) + '&lt;/li>';
+            }).join('');
+            el.summaryErrors.classList.remove('d-none');
+        } else {
+            el.summaryErrors.classList.add('d-none');
+        }
+
+        showStep('summary');
+    }
+
+    function reset() {
+        state.rows = [];
+        state.fileName = '';
+        el.file.value = '';
+        el.previewBody.innerHTML = '';
+        showError(el.uploadError, '');
+        showError(el.error, '');
+        showStep('upload');
+    }
+
+    // --- Events ---------------------------------------------------------
+
+    el.dropzone.addEventListener('click', function () { el.file.click(); });
+    el.dropzone.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); el.file.click(); }
+    });
+    el.file.addEventListener('change', function () { handleFile(el.file.files[0]); });
+
+    ['dragenter', 'dragover'].forEach(function (name) {
+        el.dropzone.addEventListener(name, function (ev) {
+            ev.preventDefault();
+            el.dropzone.classList.add('pi-dragover');
+        });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+        el.dropzone.addEventListener(name, function (ev) {
+            ev.preventDefault();
+            el.dropzone.classList.remove('pi-dragover');
+        });
+    });
+    el.dropzone.addEventListener('drop', function (ev) {
+        var files = ev.dataTransfer &amp;&amp; ev.dataTransfer.files;
+        if (files &amp;&amp; files.length) handleFile(files[0]);
+    });
+
+    el.importBtn.addEventListener('click', runImport);
+    el.resetBtn.addEventListener('click', reset);
+    el.again.addEventListener('click', reset);
+
+    // --- Init -----------------------------------------------------------
+
+    fetch('/web/session/get_session_info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params: {}, id: 1 })
+    }).then(function (res) { return res.json(); }).then(function (data) {
+        var info = data.result || {};
+        el.session.textContent = info.uid ? (info.name || info.username || '') : 'Not logged in';
+        if (!info.uid) {
+            showError(el.error, 'You are not logged into Odoo. Please log in and reload the page.');
+        }
+    }).catch(function () { /* session info is optional */ });
+})();
+</script>

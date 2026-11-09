@@ -1,12 +1,10 @@
 # Taskfile
 tmp
-
-# dotenv
+prompt.md
 .env
 
-
-# pnpm
-node_modules
-pnpm-workspace.yaml
+# Python
+.venv
+__pycache__
 
 # Project

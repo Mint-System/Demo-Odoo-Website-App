@@ -1,7 +1,5 @@
 # AGENTS.md
 
-This file has been created from `$HOME/taskfile.build/AGENTS.md.template`.
-
 Note: @Clanker refers to the "ai agent" (you) who is working on this task.
 
 ## General agent guidance
@@ -20,9 +18,41 @@ This section outlines the universal rules and expectations for any LLM agent wor
 
 ## Project structure
 
-@Clanker document the structure of this project in this section.
+```text
+.
+├── pricelist-importer.html   # CSV pricelist importer app (HTML/CSS/JS)
+├── snippet.html              # legacy pricelist editor snippet
+├── input/                    # sample vendor pricelists
+├── output/                   # UI screenshots per step
+├── scripts/
+│   ├── publish_pricelist_importer.py  # publishes the importer page
+│   └── publish.py                     # legacy publisher
+├── tmp/                      # scratch scripts, never committed
+└── task                      # task runner
+```
+
+## Common tasks
+
+- `./task publish-pricelist-importer` – create or update the "Pricelist Importer" website page from `pricelist-importer.html`.
+- `./task publish-app` – legacy publisher for `snippet.html` (pinned to the old Odoo 16 view id).
+- Verify a published page with `curl -s http://localhost:8069/pricelist-importer`.
+
+### Odoo view arch gotchas
+
+Odoo validates view arch as **XML**, not HTML. Inside `<script>` blocks in a snippet:
+
+- escape every `<` as `&lt;` and every `&&` as `&amp;&amp;`;
+- self-close void tags (`<input ... />`);
+- avoid HTML entities such as `&nbsp;` (use `&#160;`).
+
+`scripts/publish_pricelist_importer.py` normalises void tags and boolean attributes, but `<` inside scripts must be escaped in the source file.
 
 ## Environment & tooling
+
+
+### Temporary files
+
+When creating temporary files and scripts, use the `./tmp` directory.
 
 ### Taskfile
 
@@ -32,9 +62,43 @@ The `./task` file is a bash script that provides all functions necessary to work
 
 Always try to run a command with the `./task` file script.
 
-### Session Info (pi harness)
+### Session Info (Pi harness)
 
-Inside the **pi** harness, the model ID is in `$PI_MODEL` (e.g. `moonshotai/Kimi-K2.6`), and the session log is at `$PI_SESSION_FILE`. That JSONL file contains token usage in the `message.usage` fields (`input` and `output`). When completing a prompt file, extract the model and cumulative token counts from these sources.
+Inside the **Pi** harness, session details are exposed as environment variables:
+
+- `PI_MODEL` – model ID, e.g. `deepseek-v4-1-flash-1017`
+- `PI_PROVIDER` – provider, e.g. `mistral`
+- `PI_REASONING_LEVEL` – e.g. `off`
+- `PI_SESSION_ID` – e.g. `01a1a57c-a4b1-777f-ac7b-6b912be9400a`
+- `PI_SESSION_FILE` – path to the session log, e.g. `/home/janikvonrotz/.pi/agent/sessions/--home-janikvonrotz-Odoo-Build--/2026-11-04T07-36-11-698Z_01a1a57c-a4b1-777f-ac7b-6b912be9400a.jsonl`
+- `AI_AGENT` – e.g. `Pi`
+- `PI_CODING_AGENT` – e.g. `true`
+
+The session log at `$PI_SESSION_FILE` is a JSONL file. Each assistant message carries token usage in `message.usage` (`input` and `output`). When completing a prompt file, extract the model and cumulative token counts from these sources:
+
+```bash
+jq -s '[.[] | select(.type == "message" and .message.usage) | .message.usage]
+  | {input: (map(.input) | add // 0), output: (map(.output) | add // 0)}' "$PI_SESSION_FILE"
+```
+
+This prints the totals, e.g. `{"input": 19876, "output": 1064}`.
+
+### Encrypted secrets
+
+All required env vars are stored in `secrets.env`. You can load the env vars like this:
+
+```bash
+eval "$(task show-dotenv secrets)"
+```
+
+Set `SOPS_AGE_KEY_FILE=/home/$USER/.config/sops/age/keys.txt` to decrypt.
+
+### New tools
+
+Do not automatically install new software packages. Always ask for permission.
+
+## Coding conventions
+
 
 ### Prompt lifecycle
 
@@ -48,134 +112,6 @@ When the author tells you to stop (e.g. "stop" or "continue later"), preserve yo
 
 When you resume work on a `wip` prompt, read the `## WIP` section and continue from there.
 
-### New tools
-
-Do not automatically install new software packages. Always ask for permission.
-
-### Temporary files
-
-When creating temporary fiels and scripts, use the `./tmp` directory.
-
-
-### Encrypted secrets
-
-All required env vars are stored in `secrets.env`. You can load the env vars like this:
-
-```bash
-eval "$(task show-dotenv secrets)"
-```
-
-Set `SOPS_AGE_KEY_FILE=/home/$USER/.config/sops/age/keys.txt` to decrypt.
-
-## Common tasks
-
-@Clanker this is specific to every project. Update according to your discoveries.
-
-## Coding conventions
-
 ### General
 
 **Avoid try catch:** Prefer default values or default params over try catch statements.
-
-
-### Odoo - XML / Python / Javascript
-
-When developing Odoom modules refer to the [Odoo Coding Guidelines](https://www.odoo.com/documentation/master/contributing/development/coding_guidelines.html) and the [OCA Guidelines](https://github.com/OCA/odoo-community.org/blob/master/website/Contribution/CONTRIBUTING.rst). Both documents are very detailed; here are the key points:
-
-#### XML
-
-**Module structure:** Organize files into the conventional folders (`models/`, `views/`, `wizard/`, `report/`, `security/`, `data/`, `static/`). Wizards (transient models) get their own `<name>.py` + `<name>_views.xml` pair inside `wizard/`.
-
-**Record declaration:** Use the `<record>` notation rather than the deprecated shortcuts. For field declaration, the `name` attribute always comes first, then the value (in the tag or `eval`), then other attributes ordered by importance.
-
-**Grouping:** Group records by model in the file; this convention can be relaxed when there are dependencies between actions/menus/views.
-
-**noupdate data:** Use `<data>` only to scope `noupdate="1"` records. If the whole file is non-updatable, put `noupdate="1"` directly on `<odoo>` and skip the `<data>` tag.
-
-**XML ID naming:** Views use `<model_name>_view_<view_type>` (kanban, form, list, search…). The main action for a model is `<model_name>_action`; secondary actions get a `_<detail>` suffix. Groups use `<module_name>_group_<group_name>`, and rules use `<model_name>_rule_<concerned_group>`.
-
-**Inherited views:** Suffix the `name` field with `.inherit.<details>` so the override's purpose is clear at a glance; new primary views don't need this suffix.
-
-#### Python
-
-**Class naming:** Odoo Python classes use Pascal case (this changed from camelcase in older versions — be aware which Odoo version a codebase targets).
-
-**Model naming:** Use the singular dot notation for model names (`res.partner`, not `res.partners`), and a `<related_base_model>.report.<action>` pattern for report/SQL-view models.
-
-**Attribute/method ordering inside a model:** private attributes (`_name`, `_description`, …) first, then default methods (`_default_*`), then field declarations, then compute/onchange/constraint methods, then CRUD overrides, then action methods, and finally other business methods. Action methods are prefixed `action_`, operate on a single record, and should call `self.ensure_one()` first.
-
-**Variable naming:** Suffix variables with `_id`/`_ids` only when they hold an actual id or list of ids — not a recordset. One2many/Many2many fields always take the `_ids` suffix; Many2one fields take `_id`.
-
-**Style baseline:** Follow PEP8 (4-space indents, grouped/ordered imports: stdlib, third-party, local).
-
-**Odoo idioms:** Avoid creating your own generators and decorators — use only the ones the Odoo API provides — and prefer `filtered`, `mapped`, `sorted`, etc. over manual loops for readability and performance. Remember the context is a frozendict and cannot be mutated.
-
-**Documentation:** Document code with docstrings on methods and comments on tricky parts.
-
-#### JavaScript
-
-**Static layout:** Files in a module's `static/` folder are served at a URL prefixed with the module name (e.g. `static/src/js/some_file.js` → `your-server.com/<module>/static/src/js/some_file.js`). Third-party JS libraries go under `static/lib/<libname>/`.
-
-**File organization:** Each component lives in its own, meaningfully-named file, mirroring the same logic used for Python models; subdirectories structure larger "packages." The same per-component-file logic applies to QWeb templates and SCSS.
-
-**Class naming:** Prefix CSS/JS classes with `o_<module_name>` (technical module name, or main route for website-style modules).
-
-**Assets:** Never link to external images or libraries by URL — vendor them into the codebase instead.
-
-A few of these (Pascal case for Python classes, `tree` vs `list` view type) changed between Odoo versions, so worth double-checking the exact version your guideline doc targets.
-
-
-### Bash
-
-The following guideline is heavily based on the [Bash Style Guide | ysap.sh](https://style.ysap.sh/), which should be considered the primary reference for style. Adhere to the following principles to ensure scripts are safe, predictable, and maintainable.
-
-**Shebang:** Start scripts with `#!/usr/bin/env bash` for portability.
-
-**Quoting:** This is critical.
-
-- Use double quotes `"` for strings that require variable expansion.
-- Use single quotes `'` for all other strings.
-
-**Always quote variable expansions** `"$var"` to prevent word-splitting and globbing issues.
-
-**Variables:** Distinct between local and environment vars.
-
-- Use `local` for all variables inside functions.
-- Use lowercase names for local variables (e.g., `buildx_output`).
-- Use uppercase names for environment variables (e.g. `export BUILDX_PLATFORM`)
-
-**Functions:**
-
-- Do not use the `function` keyword.
-- Use `my-func() { ... }` syntax.
-- Function names are in kebab case.
-
-**Conditionals:**
-
-- Always use `[[ ... ]]` for conditional testing, not `[ ... ]` or `test`.
-- Use `((...))` for arithmetic comparisons (e.g., `((a > b))`).
-- When replacing `[]` with `[[]]` make sure to escape the brackets. The `[]` is a regex filter.
-
-**Command Substitution:**
-
-- Always use `$(...)` for command substitution, not backticks.
-
-**Arrays:**
-
-- Use Bash arrays to manage lists of items instead of space-separated strings.
-- Iterate over arrays using `for item in "${my_array[@]}"; do ... done`.
-
-**Avoid External Commands:**
-
-- Use Bash's built-in parameter expansion for string manipulation (e.g., `${var/foo/bar}`).
-- Use globbing (`*`) to iterate over files, not `ls`.
-- Avoid `cat` when a command can read a file directly (e.g., `grep "pattern" file`).
-
-**eval:** Never use `eval`.
-
-**Logging:**
-
-- Use single quotes for outputs without variables.
-- Use double quotes for outputs with variables.
-- Do not finish sentence with a dot if action is following (e.g. `"Backup file"`).
-- Finish sentence with a dot if echo is after action (e.g. `"Backup finished."`).

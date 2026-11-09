@@ -10,10 +10,10 @@ import sys
 import urllib.request
 
 BASE_URL = "http://localhost:8069"
-DB = "19.0"
+DB = "16.0"
 LOGIN = "admin"
 PASSWORD = "admin"
-VIEW_ID = 1545
+VIEW_ID = 623
 XPATH = "/t[1]/t[1]/div[1]"
 
 
